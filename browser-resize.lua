@@ -25,30 +25,52 @@ function source_create(cd)
         end
 end
 
+function process_items_recursive(scene_or_group)
+        local items = obs.obs_scene_enum_items(scene_or_group)
+        for _, item in ipairs(items) do
+                local source = obs.obs_sceneitem_get_source(item)
+                local source_type = obs.obs_source_get_unversioned_id(source)
+                
+                if source_type == "group" then
+                        -- 그룹인 경우 재귀적으로 처리
+                        local group_scene = obs.obs_group_or_scene_from_source(source)
+                        if group_scene ~= nil then
+                                process_items_recursive(group_scene)
+                        end
+                else
+                        -- 일반 아이템 처리
+                        fit_to_bounds(item, true)
+                end
+        end
+        obs.sceneitem_list_release(items)
+end
+
 function source_activate(cd)
         local source = obs.calldata_source(cd, "source")
         local name = obs.obs_source_get_name(source)
 
         local scene = obs.obs_scene_from_source(source)
-        -- find all of the items in the new scene
-        -- TODO: use obs_scene_find_source_recursive instead
-        local items = obs.obs_scene_enum_items(scene)
-        for _, item in ipairs(items) do
-                fit_to_bounds(item, true)
-        end
-        obs.sceneitem_list_release(items)
+        -- 재귀적으로 모든 아이템 처리 (그룹 내부 포함)
+        process_items_recursive(scene)
 end
 
 function fit_to_bounds(item, skip_cache)
         source = obs.obs_sceneitem_get_source(item)
         local source_type = obs.obs_source_get_unversioned_id(source)
 
-        if source_type ~= "browser_source" then
+        if source_type == "group" then
+                -- 그룹인 경우 내부 아이템들을 재귀적으로 처리
+                local group_scene = obs.obs_group_or_scene_from_source(source)
+                if group_scene ~= nil then
+                        process_items_recursive(group_scene)
+                end
+                return
+        elseif source_type ~= "browser_source" then
                 return
         end
         local data = obs.obs_source_get_settings(source)
         info = obs.obs_transform_info()
-        obs.obs_sceneitem_get_info(item, info)
+        obs.obs_sceneitem_get_info2(item, info)
         local width = info.bounds.x
         local height = info.bounds.y
         if width ~= 0 and height ~= 0 then
